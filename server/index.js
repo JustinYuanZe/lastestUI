@@ -160,7 +160,6 @@ const app = new Elysia()
 
     db.users.push(user)
     console.log('Saving user with profile:', JSON.stringify(user.profile, null, 2))
-    await saveDB(db)
 
     // Generate tokens
     const accessToken = await jwt.sign({
@@ -182,6 +181,8 @@ const app = new Elysia()
       token: refreshToken,
       createdAt: new Date().toISOString()
     })
+    
+    // Save database once after all operations
     await saveDB(db)
 
     return {
@@ -235,6 +236,8 @@ const app = new Elysia()
       token: refreshToken,
       createdAt: new Date().toISOString()
     })
+    
+    // Save database once after all operations
     await saveDB(db)
 
     return {
@@ -299,10 +302,16 @@ const app = new Elysia()
     }
 
     const token = authHeader.substring(7)
-    const payload = await jwt.verify(token)
-    if (!payload || payload.type !== 'access') {
+    let payload
+    try {
+      payload = await jwt.verify(token)
+      if (!payload || payload.type !== 'access') {
+        set.status = 401
+        return { success: false, message: 'Invalid token' }
+      }
+    } catch (error) {
       set.status = 401
-      return { success: false, message: 'Invalid token' }
+      return { success: false, message: 'Invalid or expired token' }
     }
 
     const { userId, answers, results } = body
@@ -311,8 +320,8 @@ const app = new Elysia()
       return { success: false, message: 'Missing fields' }
     }
 
-    // Verify userId matches token
-    if (userId !== payload.userId) {
+    // Verify userId matches token (convert to number for comparison)
+    if (Number(userId) !== payload.userId) {
       set.status = 403
       return { success: false, message: 'Forbidden' }
     }
@@ -344,10 +353,16 @@ const app = new Elysia()
     }
 
     const token = authHeader.substring(7)
-    const payload = await jwt.verify(token)
-    if (!payload || payload.type !== 'access') {
+    let payload
+    try {
+      payload = await jwt.verify(token)
+      if (!payload || payload.type !== 'access') {
+        set.status = 401
+        return { success: false, message: 'Invalid token' }
+      }
+    } catch (error) {
       set.status = 401
-      return { success: false, message: 'Invalid token' }
+      return { success: false, message: 'Invalid or expired token' }
     }
 
     // Verify userId matches token
@@ -377,10 +392,16 @@ const app = new Elysia()
     }
 
     const token = authHeader.substring(7)
-    const payload = await jwt.verify(token)
-    if (!payload || payload.type !== 'access') {
+    let payload
+    try {
+      payload = await jwt.verify(token)
+      if (!payload || payload.type !== 'access') {
+        set.status = 401
+        return { success: false, message: 'Invalid token' }
+      }
+    } catch (error) {
       set.status = 401
-      return { success: false, message: 'Invalid token' }
+      return { success: false, message: 'Invalid or expired token' }
     }
 
     // Verify userId matches token
