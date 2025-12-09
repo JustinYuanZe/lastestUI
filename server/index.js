@@ -172,7 +172,17 @@ async function saveDB(db) {
 }
 
 const app = new Elysia()
-  .use(cors())
+  .use(cors({
+    origin: [
+      'https://jobquiz.vercel.app',
+      'https://www.jobquiz.vercel.app',
+      'http://localhost:5173',
+      'http://localhost:3000'
+    ],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+  }))
   .use(
     jwt({
       name: 'jwt',
