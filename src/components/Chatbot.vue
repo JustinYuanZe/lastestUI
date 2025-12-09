@@ -83,7 +83,7 @@
             <div v-if="message.type === 'user'" class="message-bubble user-bubble">
               {{ message.text }}
             </div>
-            <div v-else class="message-bubble bot-bubble">
+            <div v-else class="message-bubble bot-bubble" @click="handleLinkClick">
               <div v-html="formatMessage(message.text)"></div>
             </div>
             <!-- Quick replies outside the bubble for better visibility -->
@@ -183,8 +183,8 @@ export default {
     }
   },
   mounted() {
-    // Load chat history from localStorage
-    const savedMessages = localStorage.getItem('chatbotMessages')
+    // Load chat history from sessionStorage
+    const savedMessages = sessionStorage.getItem('chatbotMessages')
     if (savedMessages) {
       try {
         this.messages = JSON.parse(savedMessages)
@@ -196,7 +196,7 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        // Scroll to bottom when opening
+        // Scroll to bottom when opening chatbot
         this.$nextTick(() => {
           this.scrollToBottom()
         })
@@ -204,8 +204,8 @@ export default {
     },
     messages: {
       handler() {
-        // Save messages to localStorage
-        localStorage.setItem('chatbotMessages', JSON.stringify(this.messages))
+        // Save messages to sessionStorage
+        sessionStorage.setItem('chatbotMessages', JSON.stringify(this.messages))
         // Scroll to bottom when new message arrives
         this.$nextTick(() => {
           this.scrollToBottom()
@@ -221,7 +221,7 @@ export default {
     
     clearChat() {
       this.messages = []
-      localStorage.removeItem('chatbotMessages')
+      sessionStorage.removeItem('chatbotMessages')
     },
     
     async sendMessage() {
@@ -294,6 +294,20 @@ export default {
       this.sendMessage()
     },
     
+    handleLinkClick(event) {
+      // Check if clicked element is a link
+      const target = event.target
+      if (target.tagName === 'A' && target.classList.contains('internal-link')) {
+        event.preventDefault()
+        const route = target.getAttribute('data-route')
+        if (route) {
+          this.$router.push(route)
+          // Optionally close the chatbot after navigation
+          // this.isOpen = false
+        }
+      }
+    },
+    
     formatMessage(text) {
       if (!text) return ''
       
@@ -302,6 +316,7 @@ export default {
       // First, protect code blocks and inline code from other processing
       const codeBlocks = []
       const inlineCodes = []
+      const links = []
       
       // Extract and store code blocks
       formatted = formatted.replace(/```([\s\S]*?)```/g, (match, code) => {
@@ -315,6 +330,12 @@ export default {
         return `__INLINECODE_${inlineCodes.length - 1}__`
       })
       
+      // Extract and store markdown links [text](url)
+      formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+        links.push({ text, url })
+        return `__LINK_${links.length - 1}__`
+      })
+      
       // Now escape HTML to prevent XSS (but our placeholders are safe)
       formatted = formatted
         .replace(/&/g, '&amp;')
@@ -322,6 +343,12 @@ export default {
         .replace(/>/g, '&gt;')
       
       // Process markdown formatting
+      // Headings (### Heading)
+      formatted = formatted.replace(/^#### (.+)$/gm, '<h4 class="chat-heading">$1</h4>')
+      formatted = formatted.replace(/^### (.+)$/gm, '<h3 class="chat-heading">$1</h3>')
+      formatted = formatted.replace(/^## (.+)$/gm, '<h2 class="chat-heading">$1</h2>')
+      formatted = formatted.replace(/^# (.+)$/gm, '<h1 class="chat-heading">$1</h1>')
+      
       // Bold (**text** or __text__)
       formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       formatted = formatted.replace(/__([^_]+)__/g, '<strong>$1</strong>')
@@ -406,6 +433,24 @@ export default {
         formatted = formatted.replace(`__INLINECODE_${i}__`, `<code class="inline-code">${decodedCode}</code>`)
       })
       
+      // Restore markdown links as router-links or external links
+      links.forEach((link, i) => {
+        // Check if it's an internal route (starts with /)
+        if (link.url.startsWith('/')) {
+          // Internal route - make it clickable but don't use router-link in v-html
+          formatted = formatted.replace(
+            `__LINK_${i}__`, 
+            `<a href="${link.url}" class="chat-link internal-link" data-route="${link.url}">${link.text}</a>`
+          )
+        } else {
+          // External link
+          formatted = formatted.replace(
+            `__LINK_${i}__`, 
+            `<a href="${link.url}" class="chat-link external-link" target="_blank" rel="noopener noreferrer">${link.text}</a>`
+          )
+        }
+      })
+      
       return formatted
     },
     
@@ -420,7 +465,10 @@ export default {
     scrollToBottom() {
       const container = this.$refs.messagesContainer
       if (container) {
-        container.scrollTop = container.scrollHeight
+        // Use requestAnimationFrame for smoother scrolling
+        requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight
+        })
       }
     },
     
@@ -576,6 +624,7 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  scroll-behavior: smooth;
 }
 
 .message {
@@ -633,6 +682,52 @@ export default {
 
 .bot-bubble :deep(em) {
   font-style: italic;
+}
+
+.bot-bubble :deep(.chat-heading) {
+  font-weight: 600;
+  color: #1565C0;
+  margin: 8px 0 4px 0;
+}
+
+.bot-bubble :deep(h1.chat-heading) {
+  font-size: 1.25em;
+  margin-top: 12px;
+}
+
+.bot-bubble :deep(h2.chat-heading) {
+  font-size: 1.15em;
+  margin-top: 10px;
+}
+
+.bot-bubble :deep(h3.chat-heading) {
+  font-size: 1.05em;
+  margin-top: 8px;
+}
+
+.bot-bubble :deep(h4.chat-heading) {
+  font-size: 1em;
+  margin-top: 6px;
+}
+
+.bot-bubble :deep(.chat-link) {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 1px solid #1976d2;
+  transition: all 0.2s ease;
+}
+
+.bot-bubble :deep(.chat-link:hover) {
+  color: #1565c0;
+  border-bottom-color: #1565c0;
+  background-color: rgba(25, 118, 210, 0.05);
+}
+
+.bot-bubble :deep(.external-link)::after {
+  content: ' ↗';
+  font-size: 0.85em;
 }
 
 .bot-bubble :deep(.chat-list) {
