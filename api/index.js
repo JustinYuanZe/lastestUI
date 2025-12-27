@@ -3,11 +3,14 @@ import connectDB from './src/config/database.js'
 
 await connectDB();
 
-export default app;
+export default async function handler(request) {
+    const url = new URL(request.url);
 
-if (!process.env.VERCEL) {
-    const PORT = process.env.PORT || 3000
-    app.listen(PORT, () => {
-        console.log(`🐹 Elysia is running at http://localhost:${PORT}`)
-    })
+    if (url.pathname.startsWith('/api')) {
+        url.pathname = url.pathname.replace('/api', '');
+    }
+
+    const newReq = new Request(url.toString(), request);
+
+    return app.fetch(newReq);
 }
