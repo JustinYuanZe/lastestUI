@@ -1,16 +1,27 @@
 import { Elysia } from 'elysia'
 import bcrypt from 'bcryptjs'
 import { User, RefreshToken } from '../models/index.js'
+import connectDB from '../config/database.js'
 
 const SALT_ROUNDS = 10
 
 export const authRoutes = (jwt, refreshJwt) => new Elysia()
   .post('/register', async ({ body, set }) => {
+    console.log("👉 [Register] Start request...");
+
+    try {
+        await connectDB();
+        console.log("👉 [Register] DB Connection ensured.");
+    } catch (dbError) {
+        console.error("❌ [Register] DB Connection Failed:", dbError);
+        set.status = 500;
+        return { success: false, message: 'Database connection failed' };
+    }
+
     const {
       username,
       password,
       department,
-      // Profile fields (optional)
       identity,
       gender,
       accountNumber,
@@ -29,74 +40,36 @@ export const authRoutes = (jwt, refreshJwt) => new Elysia()
       agreedToTerms
     } = body
 
-    // Server-side validation
+    console.log("👉 [Register] Validating input...");
+
     if (!username || !password || !department) {
       set.status = 400
       return { success: false, message: 'Missing required fields: username, password and department' }
     }
 
-    // Validate username length and format
     if (typeof username !== 'string' || username.length < 3 || username.length > 50) {
       set.status = 400
       return { success: false, message: 'Username must be between 3 and 50 characters' }
     }
 
-    // Validate password strength
     if (typeof password !== 'string' || password.length < 6) {
       set.status = 400
       return { success: false, message: 'Password must be at least 6 characters long' }
     }
 
-    // Validate email format if provided
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (email && !emailRegex.test(email)) {
-      set.status = 400
-      return { success: false, message: 'Invalid email format' }
-    }
-
-    // Validate identity field
-    const validIdentities = ['student', 'Unemployed', 'employed']
-    if (identity && !validIdentities.includes(identity)) {
-      set.status = 400
-      return { success: false, message: 'Invalid identity value' }
-    }
-
-    // Validate gender field
-    const validGenders = ['female', 'male']
-    if (gender && !validGenders.includes(gender)) {
-      set.status = 400
-      return { success: false, message: 'Invalid gender value' }
-    }
-
-    // Validate dateOfBirth structure if provided
-    if (dateOfBirth && typeof dateOfBirth === 'object') {
-      const { year, month, day } = dateOfBirth
-      if (year && (year < 1900 || year > new Date().getFullYear())) {
-        set.status = 400
-        return { success: false, message: 'Invalid birth year' }
-      }
-      if (month && (month < 1 || month > 12)) {
-        set.status = 400
-        return { success: false, message: 'Invalid birth month' }
-      }
-      if (day && (day < 1 || day > 31)) {
-        set.status = 400
-        return { success: false, message: 'Invalid birth day' }
-      }
-    }
-
     try {
-      // Check if user already exists
+      console.log("👉 [Register] Checking existing user...");
       const existingUser = await User.findOne({ username })
+      
       if (existingUser) {
         set.status = 400
         return { success: false, message: 'Username already exists' }
       }
 
-      // Hash password before storing
+      console.log("👉 [Register] Hashing password...");
       const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS)
 
-      // Create new user
+      console.log("👉 [Register] Creating user object...");
       const user = new User({
         username,
         password: hashedPassword,
@@ -125,9 +98,10 @@ export const authRoutes = (jwt, refreshJwt) => new Elysia()
         }
       })
 
-      await user.save()
+      console.log("👉 [Register] Saving to MongoDB...");
+      await user.save({ wtimeout: 25000 }); 
+      console.log("👉 [Register] Saved successfully!");
 
-      // Generate tokens
       const accessToken = await jwt.sign({
         userId: user._id.toString(),
         username: user.username,
@@ -140,12 +114,12 @@ export const authRoutes = (jwt, refreshJwt) => new Elysia()
         type: 'refresh'
       })
 
-      // Store refresh token
       await RefreshToken.create({
         userId: user._id,
         token: refreshToken
       })
 
+      console.log("👉 [Register] Done. Sending response.");
       return {
         success: true,
         user: {
@@ -158,13 +132,15 @@ export const authRoutes = (jwt, refreshJwt) => new Elysia()
         refreshToken
       }
     } catch (error) {
-      console.error('Registration error:', error)
+      console.error('❌ [Register] Error:', error)
       set.status = 500
-      return { success: false, message: 'Internal server error' }
+      return { success: false, message: 'Internal server error: ' + error.message }
     }
   })
 
   .post('/login', async ({ body, set }) => {
+    await connectDB(); 
+    
     const { username, password } = body
 
     if (!username || !password) {
@@ -180,7 +156,6 @@ export const authRoutes = (jwt, refreshJwt) => new Elysia()
         return { success: false, message: 'Invalid credentials' }
       }
 
-      // Verify password hash
       const passwordMatch = await bcrypt.compare(password, user.password)
 
       if (!passwordMatch) {
@@ -188,7 +163,6 @@ export const authRoutes = (jwt, refreshJwt) => new Elysia()
         return { success: false, message: 'Invalid credentials' }
       }
 
-      // Generate tokens
       const accessToken = await jwt.sign({
         userId: user._id.toString(),
         username: user.username,
@@ -201,7 +175,6 @@ export const authRoutes = (jwt, refreshJwt) => new Elysia()
         type: 'refresh'
       })
 
-      // Store refresh token
       await RefreshToken.create({
         userId: user._id,
         token: refreshToken
@@ -226,50 +199,44 @@ export const authRoutes = (jwt, refreshJwt) => new Elysia()
   })
 
   .post('/refresh', async ({ body, set }) => {
-    const { refreshToken } = body
-
+    await connectDB();
+    const { refreshToken } = body;
+    
     if (!refreshToken) {
-      set.status = 400
-      return { success: false, message: 'Refresh token required' }
+         set.status = 400
+         return { success: false, message: 'Refresh token required' }
     }
-
+    
     try {
-      const payload = await refreshJwt.verify(refreshToken)
-
-      if (!payload || payload.type !== 'refresh') {
-        set.status = 401
-        return { success: false, message: 'Invalid refresh token' }
-      }
-
-      // Check if refresh token exists in database
-      const tokenExists = await RefreshToken.findOne({
-        token: refreshToken,
-        userId: payload.userId
-      })
-
-      if (!tokenExists) {
-        set.status = 401
-        return { success: false, message: 'Refresh token not found' }
-      }
-
-      // Generate new access token
-      const accessToken = await jwt.sign({
-        userId: payload.userId,
-        username: payload.username,
-        type: 'access'
-      })
-
-      return { success: true, accessToken }
+       const payload = await refreshJwt.verify(refreshToken)
+       if (!payload || payload.type !== 'refresh') {
+         set.status = 401
+         return { success: false, message: 'Invalid refresh token' }
+       }
+       const tokenExists = await RefreshToken.findOne({
+         token: refreshToken,
+         userId: payload.userId
+       })
+       if (!tokenExists) {
+         set.status = 401
+         return { success: false, message: 'Refresh token not found' }
+       }
+       const accessToken = await jwt.sign({
+         userId: payload.userId,
+         username: payload.username,
+         type: 'access'
+       })
+       return { success: true, accessToken }
     } catch (error) {
-      console.error('Refresh token error:', error)
-      set.status = 401
-      return { success: false, message: 'Invalid or expired refresh token' }
+       console.error('Refresh token error:', error)
+       set.status = 401
+       return { success: false, message: 'Invalid or expired refresh token' }
     }
   })
-
+  
   .post('/logout', async ({ body }) => {
+    await connectDB();
     const { refreshToken } = body
-
     if (refreshToken) {
       try {
         await RefreshToken.deleteOne({ token: refreshToken })
@@ -277,7 +244,5 @@ export const authRoutes = (jwt, refreshJwt) => new Elysia()
         console.error('Logout error:', error)
       }
     }
-
     return { success: true, message: 'Logged out successfully' }
   })
-
