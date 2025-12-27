@@ -1,7 +1,7 @@
 import app from '../server/index.js';
 
 export default async function handler(request) {
-    const url = new URL(request.url);
+    const url = new URL(request.url, 'http://localhost');
 
     if (url.pathname.startsWith('/api')) {
         url.pathname = url.pathname.replace('/api', '');
