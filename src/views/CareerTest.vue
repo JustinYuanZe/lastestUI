@@ -3,48 +3,41 @@
     <v-row justify="center">
       <v-col cols="12" sm="10" md="8" lg="6">
         <v-card class="test-card" elevation="3">
-          <!-- Header -->
           <div class="test-header pa-4 text-center">
             <v-icon color="white" size="28">mdi-clipboard-list</v-icon>
-            <h1 class="text-h6 font-weight-bold text-white mt-2">{{ $t('test.title') }}</h1>
+            <h1 class="text-h6 font-weight-bold text-white mt-2">Career Test</h1>
             <div class="text-body-2 text-white opacity-80 mt-1">
-              {{ $t('test.questionOf', { current: currentQuestion + 1, total: questions.length }) }}
+              Question {{ currentQuestion + 1 }} of {{ questions.length }}
             </div>
           </div>
 
-          <!-- Progress -->
           <v-progress-linear :model-value="progress" color="success" height="6" class="progress-bar"></v-progress-linear>
 
           <v-card-text class="pa-4">
-            <!-- Loading State -->
             <div v-if="loading" class="text-center py-8">
               <v-progress-circular indeterminate color="primary" size="40"></v-progress-circular>
-              <p class="mt-3 text-body-2 text-grey">{{ $t('test.loadingQuestions') }}</p>
+              <p class="mt-3 text-body-2 text-grey">Loading questions...</p>
             </div>
 
-            <!-- Question Content -->
             <div v-else-if="!showResults && questions.length > 0">
-              <!-- Part Header -->
               <v-alert v-if="showPartHeader" type="info" variant="tonal" density="compact" class="mb-4">
                 <div class="text-body-2 font-weight-bold">
-                  {{ $t('test.part', { number: questions[currentQuestion].part }) }}: {{ questions[currentQuestion].partTitle }}
+                  Part {{ questions[currentQuestion].part }}: {{ questions[currentQuestion].partTitle }}
                 </div>
               </v-alert>
 
-              <!-- Question Card -->
               <div class="question-box mb-5">
                 <v-chip size="x-small" color="primary" variant="flat" class="mb-2">
-                  {{ questions[currentQuestion].id }}
+                  {{ questions[currentQuestion].category ? questions[currentQuestion].category.toUpperCase() : 'GENERAL' }}
                 </v-chip>
                 <p class="question-text">{{ questions[currentQuestion].question }}</p>
               </div>
 
-              <!-- Rating Options -->
               <div class="rating-scale">
                 <v-radio-group v-model="answers[questions[currentQuestion].id]" class="ma-0">
                   <div class="scale-options">
                     <label 
-                      v-for="option in translatedRatingOptions" 
+                      v-for="option in ratingOptions" 
                       :key="option.value" 
                       class="scale-option" 
                       :class="{ 'selected': answers[questions[currentQuestion].id] === option.value }"
@@ -57,47 +50,27 @@
                 </v-radio-group>
               </div>
 
-              <!-- Navigation Buttons -->
               <div class="d-flex justify-space-between mt-5">
-                <v-btn 
-                  variant="outlined" 
-                  color="grey-darken-1"
-                  :disabled="currentQuestion === 0" 
-                  @click="previousQuestion"
-                  prepend-icon="mdi-arrow-left"
-                >
-                  {{ $t('common.previous') }}
+                <v-btn variant="outlined" color="grey-darken-1" :disabled="currentQuestion === 0" @click="previousQuestion" prepend-icon="mdi-arrow-left">
+                  Previous
                 </v-btn>
 
-                <v-btn 
-                  v-if="currentQuestion < questions.length - 1" 
-                  color="primary"
-                  :disabled="answers[questions[currentQuestion].id] === undefined"
-                  @click="nextQuestion" 
-                  append-icon="mdi-arrow-right"
-                >
-                  {{ $t('common.next') }}
+                <v-btn v-if="currentQuestion < questions.length - 1" color="primary" :disabled="answers[questions[currentQuestion].id] === undefined" @click="nextQuestion" append-icon="mdi-arrow-right">
+                  Next
                 </v-btn>
 
-                <v-btn 
-                  v-else 
-                  color="success"
-                  :disabled="answers[questions[currentQuestion].id] === undefined" 
-                  @click="finishTest"
-                  prepend-icon="mdi-check"
-                >
-                  {{ $t('test.complete') }}
+                <v-btn v-else color="success" :disabled="answers[questions[currentQuestion].id] === undefined" :loading="isAnalyzing" @click="finishTest" prepend-icon="mdi-check">
+                  {{ isAnalyzing ? 'Analyzing...' : 'Complete Test' }}
                 </v-btn>
               </div>
             </div>
 
-            <!-- Completion State -->
             <div v-else-if="showResults" class="text-center py-6">
               <v-icon color="success" size="56">mdi-check-circle</v-icon>
-              <h2 class="text-h6 mt-4 mb-2">{{ $t('test.completed') }}</h2>
+              <h2 class="text-h6 mt-4 mb-2">Test Completed</h2>
               <p class="text-body-2 text-grey mb-4">Your results are ready!</p>
               <v-btn color="primary" size="large" :to="{ name: 'Results' }" prepend-icon="mdi-chart-line">
-                {{ $t('test.viewResults') }}
+                View Results
               </v-btn>
             </div>
           </v-card-text>
@@ -109,7 +82,7 @@
 
 <script>
 import { auth } from '../store/auth'
-import { API_URL } from '../config/api'
+import { API_ENDPOINTS } from '../config/api'
 
 export default {
   name: 'CareerTest',
@@ -119,7 +92,8 @@ export default {
       answers: {},
       showResults: false,
       questions: [],
-      loading: true
+      loading: true,
+      isAnalyzing: false
     }
   },
   computed: {
@@ -133,13 +107,13 @@ export default {
       const prevPart = this.questions[this.currentQuestion - 1]?.part
       return currentPart !== prevPart
     },
-    translatedRatingOptions() {
+    ratingOptions() {
       return [
-        { value: -2, text: this.$t('test.stronglyDisagree') },
-        { value: -1, text: this.$t('test.disagree') },
-        { value: 0, text: this.$t('test.neutral') },
-        { value: 1, text: this.$t('test.agree') },
-        { value: 2, text: this.$t('test.stronglyAgree') }
+        { value: -2, text: 'Strongly Disagree' },
+        { value: -1, text: 'Disagree' },
+        { value: 0, text: 'Neutral' },
+        { value: 1, text: 'Agree' },
+        { value: 2, text: 'Strongly Agree' }
       ]
     }
   },
@@ -153,17 +127,26 @@ export default {
   methods: {
     async loadQuestions() {
       try {
-        const response = await fetch(`${API_URL}/questions`)
+        const response = await fetch(API_ENDPOINTS.QUESTIONS)
         const data = await response.json()
-        if (data.success) {
+        if (data.success && data.questions && data.questions.length > 0) {
           this.questions = data.questions
+        } else {
+          this.loadDefaultQuestions()
         }
       } catch (error) {
         console.error('Failed to load questions:', error)
-        this.questions = []
+        this.loadDefaultQuestions()
       } finally {
         this.loading = false
       }
+    },
+    loadDefaultQuestions() {
+      this.questions = [
+        { id: "T1", part: 1, partTitle: "Technical Skills", question: "I enjoy writing code to solve logical problems.", category: "technical" },
+        { id: "B1", part: 2, partTitle: "Business & Management", question: "I enjoy leading teams and managing projects.", category: "business" },
+        { id: "C1", part: 3, partTitle: "Creativity & Design", question: "I enjoy designing visual interfaces (UI).", category: "creative" }
+      ]
     },
     nextQuestion() {
       if (this.currentQuestion < this.questions.length - 1) {
@@ -180,8 +163,10 @@ export default {
       localStorage.setItem('careerTestAnswers', JSON.stringify(this.answers))
     },
     async finishTest() {
+      this.isAnalyzing = true
       this.saveAnswers()
       await this.calculateResults()
+      this.isAnalyzing = false
       this.showResults = true
     },
     async calculateResults() {
@@ -192,20 +177,56 @@ export default {
         interdisciplinary: 0
       }
 
+      const qaPayload = []
+      const sanitizedAnswers = {}
+
       this.questions.forEach(question => {
         const answer = this.answers[question.id]
         if (answer !== undefined) {
           const category = question.category
-          categoryScores[category] = (categoryScores[category] || 0) + answer
+          if(categoryScores[category] !== undefined) {
+             categoryScores[category] += answer
+          }
+          
+          qaPayload.push({
+            question: question.question,
+            score: answer
+          })
+
+          const safeId = question.id.replace(/\./g, '_')
+          sanitizedAnswers[safeId] = answer
         }
       })
 
-      const results = this.generateCareerRecommendations(categoryScores)
+      let results = this.generateCareerRecommendations(categoryScores)
+
+      try {
+        const response = await fetch(API_ENDPOINTS.CAREER_ANALYSIS, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ answers: qaPayload })
+        })
+
+        if (response.ok) {
+            const aiData = await response.json()
+            results.aiAnalysis = {
+                summary: aiData.ai_summary,
+                courses: aiData.courses
+            }
+        } else {
+            console.warn("AI API Error:", response.status)
+        }
+      } catch (error) {
+        console.error('AI Analysis failed:', error)
+      }
+
       localStorage.setItem('careerResults', JSON.stringify(results))
 
       if (auth.isLoggedIn && auth.user && auth.accessToken) {
         try {
-          const response = await fetch(`${API_URL}/test-results`, {
+          await fetch(API_ENDPOINTS.TEST_RESULTS, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -213,16 +234,12 @@ export default {
             },
             body: JSON.stringify({
               userId: auth.user.id,
-              answers: this.answers,
-              results
+              answers: sanitizedAnswers,
+              results: results
             })
           })
-          const data = await response.json()
-          if (data.success) {
-            console.log('Test results saved to database')
-          }
         } catch (error) {
-          console.error('Failed to save test results:', error)
+          console.error('Failed to save to DB:', error)
         }
       }
 
@@ -233,38 +250,52 @@ export default {
         technical: {
           title: "Software Engineering & Computer Science",
           careers: ["Software Developer", "Data Scientist", "Machine Learning Engineer", "Systems Architect", "Cybersecurity Specialist"],
-          description: "Suitable for those who love technology, problem-solving, and building complex systems"
+          description: "Suitable for those who love technology and problem-solving"
         },
         business: {
           title: "Business Information Systems & IT Management",
           careers: ["IT Project Manager", "Business Analyst", "IT Consultant", "Product Manager", "Data Analyst"],
-          description: "Suitable for those with management skills and business understanding combined with technology"
+          description: "Suitable for those with management skills and business understanding"
         },
         creative: {
           title: "Digital Design & Media Technology",
           careers: ["UI/UX Designer", "Front-end Developer", "Digital Content Creator", "Interactive Media Designer", "Web Designer"],
-          description: "Suitable for those with creativity and aesthetic sense in digital media"
+          description: "Suitable for those with creativity in digital media"
         },
         interdisciplinary: {
           title: "Interdisciplinary IT & Emerging Technologies",
           careers: ["Tech Entrepreneur", "Innovation Consultant", "Digital Transformation Specialist", "EdTech Developer", "HealthTech Specialist"],
-          description: "Suitable for those who thrive at the intersection of technology and other fields"
+          description: "Suitable for those at the intersection of technology and other fields"
         }
       }
 
-      const maxScorePerCategory = {}
+      const questionCountPerCategory = {}
       this.questions.forEach(q => {
-        maxScorePerCategory[q.category] = (maxScorePerCategory[q.category] || 0) + 2
+        const cat = q.category || 'technical'
+        questionCountPerCategory[cat] = (questionCountPerCategory[cat] || 0) + 1
       })
 
       const sortedFields = Object.entries(categoryScores)
-        .sort(([, a], [, b]) => b - a)
-        .map(([field, score]) => ({
-          field,
-          score,
-          maxScore: maxScorePerCategory[field] || 1,
-          ...careers[field]
-        }))
+        .map(([field, rawScore]) => {
+          const count = questionCountPerCategory[field] || 1;
+          const minPossible = count * -2;
+          const maxPossible = count * 2;
+          const range = maxPossible - minPossible;
+          
+          let percentage = 0;
+          if (range > 0) {
+             percentage = Math.round(((rawScore - minPossible) / range) * 100);
+          }
+
+          return {
+            field,
+            score: rawScore,
+            maxScore: maxPossible,
+            percentage: percentage,
+            ...careers[field]
+          }
+        })
+        .sort((a, b) => b.percentage - a.percentage)
 
       return {
         topRecommendations: sortedFields,
@@ -367,7 +398,6 @@ export default {
   font-weight: 600;
 }
 
-/* Responsive */
 @media (max-width: 600px) {
   .scale-options {
     flex-wrap: wrap;
