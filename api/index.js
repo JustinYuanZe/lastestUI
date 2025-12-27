@@ -1,7 +1,4 @@
-import app from './src/index.js'
-import connectDB from './src/config/database.js'
-
-await connectDB();
+import app from '../server/index.js';
 
 export default async function handler(request) {
     const url = new URL(request.url);
@@ -11,6 +8,5 @@ export default async function handler(request) {
     }
 
     const newReq = new Request(url.toString(), request);
-
     return app.fetch(newReq);
 }
