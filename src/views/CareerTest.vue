@@ -293,9 +293,7 @@ export default {
       try {
         const response = await fetch(API_ENDPOINTS.CAREER_ANALYSIS, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ answers: qaPayload })
         })
 
@@ -305,21 +303,18 @@ export default {
                 summary: aiData.ai_summary,
                 courses: aiData.courses
             }
-        } else {
-            console.warn("AI API Error:", response.status)
         }
       } catch (error) {
-        console.error('AI Analysis failed:', error)
+        console.warn('AI Analysis failed/skipped:', error)
       }
 
       localStorage.setItem('careerResults', JSON.stringify(results))
 
       if (auth.isLoggedIn && auth.user) {
-        try {
-          const userIdToSend = auth.user.id || auth.user._id || 'demo_user_id';
-          const usernameToSend = auth.user.username || 'Demo User';
+        const userIdToSend = auth.user.id || auth.user._id || 'demo_user_id';
+        const usernameToSend = auth.user.username || 'Demo User';
 
-          await fetch(API_ENDPOINTS.TEST_RESULTS, {
+        fetch(API_ENDPOINTS.TEST_RESULTS, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -331,10 +326,7 @@ export default {
               answers: sanitizedAnswers,
               results: results
             })
-          })
-        } catch (error) {
-          console.error('Failed to save to DB:', error)
-        }
+        }).catch(err => console.log("Fail saving to database:", err));
       }
 
       return results
