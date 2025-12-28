@@ -4,28 +4,21 @@ import { jwt } from '@elysiajs/jwt'
 import connectDB from './config/database.js'
 import { authRoutes, testRoutes, userRoutes, questionRoutes } from './routes/index.js'
 
-const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'default-secret'
-const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'default-refresh-secret'
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'default'
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'default'
 
-const SYSTEM_PROMPT = `You are the Job Assistant. Be concise and practical. Focus on IT careers.`;
+const SYSTEM_PROMPT = `You are the Job Assistant. Be concise.`;
 
 function buildRequestPayload(userMessage) {
   return {
     contents: [{ parts: [{ text: `${SYSTEM_PROMPT}\n\nUser: ${userMessage}` }] }],
-    generationConfig: { temperature: 0.7, maxOutputTokens: 800 }
+    generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
   };
 }
 
 const app = new Elysia()
   .use(cors({
-    origin: [
-      'https://jobquiz.vercel.app',
-      'https://www.jobquiz.vercel.app',
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:1409',
-      'http://localhost:3000'
-    ],
+    origin: [ 'https://jobquiz.vercel.app', 'http://localhost:5173', 'http://localhost:3000' ],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
@@ -36,41 +29,36 @@ const app = new Elysia()
   .get('/', () => ({ status: 'online', version: '1.0.0' }))
   
   .get('/health', async () => {
-    try {
-        await connectDB();
-        return { status: 'ok', db: 'connected' }
-    } catch (e) {
-        return { status: 'error', error: e.message }
-    }
+    try { await connectDB(); return { status: 'ok', db: 'connected' } } 
+    catch (e) { return { status: 'error', error: e.message } }
   })
 
   .post('/api/chatbot/message', async ({ body, set }) => {
-    console.log("👉 [DIRECT] Request received at index.js");
+    console.log("👉 [START] Chatbot Request Received");
     
     try {
         const { message } = body;
         if (!message) { set.status = 400; return { error: 'Message required' }; }
 
         const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            console.error("❌ Missing API Key");
-            return { reply: "System Error: Missing API Key" };
-        }
+        if (!apiKey) return { reply: "System Error: Missing API Key" };
 
-        const MODEL_NAME = 'gemini-2.5-flash';
+        const MODEL_NAME = 'gemini-1.5-flash';
+        
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
         
-        console.log(`👉 [FETCH] Calling ${MODEL_NAME}...`);
+        console.log(`👉 [FETCH] Calling Google (${MODEL_NAME})...`);
         
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(buildRequestPayload(message))
+            body: JSON.stringify(buildRequestPayload(message)),
+            signal: AbortSignal.timeout(8000) 
         });
 
         if (!response.ok) {
             const errText = await response.text();
-            console.error(`❌ [GOOGLE FAIL] ${response.status}`, errText);
+            console.error(`❌ [GOOGLE REJECT] Status: ${response.status}`);
             throw new Error(`Google Error: ${response.status}`);
         }
 
@@ -80,40 +68,41 @@ const app = new Elysia()
         console.log("✅ [SUCCESS] Reply sent.");
         return {
             reply: replyText,
-            quickReplies: ['Interview Tips', 'Career Path'],
-            metadata: { model: MODEL_NAME, method: 'direct_fetch' }
+            quickReplies: ['Tips', 'Career'],
+            metadata: { model: MODEL_NAME }
         };
 
     } catch (error) {
-        console.error("❌ [ERROR]", error);
+        console.error("❌ [ERROR]", error.name, error.message);
+        
+        if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+            return {
+                reply: "⚠️ Connection Timeout: Google is blocking the server connection. (It works locally but Vercel IP is restricted).",
+                quickReplies: ["Retry"],
+                metadata: { error: "Timeout" }
+            };
+        }
+
         return {
-            reply: "I am currently overloaded. Please try again in 1 minute.",
+            reply: `System Error: ${error.message}`,
             quickReplies: ["Retry"],
             metadata: { error: error.message }
         };
     }
   }, {
-    body: t.Object({
-        message: t.String(),
-        context: t.Optional(t.Any())
-    })
+    body: t.Object({ message: t.String(), context: t.Optional(t.Any()) })
   })
 
   .use((app) => {
     const jwtPlugin = app.decorator.jwt
     const refreshJwtPlugin = app.decorator.refreshJwt
-    
     app.use(authRoutes(jwtPlugin, refreshJwtPlugin))
-    
     if (typeof testRoutes === 'function') app.use(testRoutes(jwtPlugin))
     else app.use(testRoutes)
-
     if (typeof userRoutes === 'function') app.use(userRoutes(jwtPlugin))
     else app.use(userRoutes)
-
     if (typeof questionRoutes === 'function') app.use(questionRoutes(jwtPlugin))
     else app.use(questionRoutes)
-
     return app
   })
 
