@@ -1,81 +1,89 @@
 import { Elysia, t } from 'elysia'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const BYPASS_AI = true;
+const SYSTEM_PROMPT = `You are the Job Assistant for the Job Quiz web application.
+Be concise, friendly, and practical.
+Focus on IT careers: Technical, Business, Creative, Interdisciplinary.`;
 
-const SYSTEM_PROMPT = `You are a helpful Career Assistant.`;
+function buildRequestPayload(userMessage, context) {
+  const fullPrompt = `${SYSTEM_PROMPT}\n\nUser Question: ${userMessage}`;
+  
+  return {
+    contents: [{
+      parts: [{
+        text: fullPrompt
+      }]
+    }],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 500,
+    }
+  };
+}
 
-const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
+function generateQuickReplies(userMessage) {
+  return ['Interview Tips', 'Career Path', 'Resume Help'];
+}
 
 export const chatbotRoutes = (jwt) => new Elysia()
   .post('/api/chatbot/message', async ({ body, set }) => {
     
-    const startTime = Date.now();
-    log("👉 [START] Request received at /api/chatbot/message");
+    console.log("👉 [START] Request received (Using RAW FETCH)");
 
     try {
-      const { message } = body
+      const { message, context } = body;
 
       if (!message) {
-        set.status = 400
-        return { error: 'Message required' }
-      }
-
-      if (BYPASS_AI) {
-        log("🚀 [BYPASS MODE] Skipping Google API to test Server Latency.");
-        
-        await new Promise(r => setTimeout(r, 1000));
-        
-        log("✅ [SUCCESS] Server is responding!");
-        return {
-          reply: `[DIAGNOSTIC MODE] Server is WORKING! \n\nI received your message: "${message}". \n\n(Since I replied instantly, the issue is confirmed to be the connection to Google API).`,
-          quickReplies: ["Test Passed", "Server OK"],
-          metadata: { mode: 'bypass_ai', duration: Date.now() - startTime }
-        }
+        set.status = 400;
+        return { error: 'Message required' };
       }
 
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        log("❌ Missing API Key");
-        throw new Error("Missing API Key");
+        console.error("❌ Missing API Key");
+        set.status = 500;
+        return { error: 'Server configuration error (Missing API Key)' };
       }
 
-      log("👉 [CONNECTING] Initializing Gemini...");
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const MODEL_NAME = 'gemini-2.5-flash'; 
+      const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
-      log("👉 [SENDING] Sending prompt to Google...");
+      console.log(`👉 [FETCH] Calling Google API: ${MODEL_NAME}...`);
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(buildRequestPayload(message, context))
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error(`❌ [GOOGLE ERROR] Status: ${response.status}`, errorData);
+        throw new Error(`Google API Error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
       
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Google API Timeout (10s Limit)")), 10000)
-      );
-
-      const result = await Promise.race([
-        model.generateContent(SYSTEM_PROMPT + "\nUser: " + message),
-        timeoutPromise
-      ]);
-
-      log("👉 [RECEIVED] Google responded!");
-      const response = await result.response;
-      const text = response.text();
-
-      log(`✅ [DONE] Finished in ${Date.now() - startTime}ms`);
+      const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
+      
+      console.log("✅ [SUCCESS] Reply received!");
 
       return {
-        reply: text,
-        quickReplies: [],
-        metadata: { model: 'gemini-2.5-flash' }
-      }
+        reply: replyText,
+        quickReplies: generateQuickReplies(message),
+        metadata: { model: MODEL_NAME, method: 'raw_fetch' }
+      };
 
     } catch (error) {
-      log(`❌ [ERROR] ${error.message}`);
+      console.error(`❌ [ERROR]: ${error.message}`);
       set.status = 500;
       
       return {
-        reply: `DIAGNOSTIC ERROR: ${error.message}. (Check Vercel Logs for details)`,
-        quickReplies: ["Retry"],
+        reply: "I'm having trouble connecting to my brain right now. Please try again in a moment.",
+        quickReplies: ["Try Again"],
         metadata: { error: error.message }
-      }
+      };
     }
   }, {
     body: t.Object({
