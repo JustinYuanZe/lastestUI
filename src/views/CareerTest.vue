@@ -84,6 +84,114 @@
 import { auth } from '../store/auth'
 import { API_ENDPOINTS } from '../config/api'
 
+const HARDCODED_QUESTIONS = [
+  {
+    id: "Q1.1",
+    part: 1,
+    partTitle: "Activity & Interest Survey (Activities)",
+    question: "Participating in a programming competition (hackathon) or solving coding puzzles (e.g., LeetCode).",
+    category: "technical"
+  },
+  {
+    id: "Q1.2",
+    part: 1,
+    partTitle: "Activity & Interest Survey (Activities)",
+    question: "Tinkering with computer hardware, assembling a PC, or building simple electronic circuits (e.g., with Arduino, Raspberry Pi).",
+    category: "technical"
+  },
+  {
+    id: "Q1.7",
+    part: 1,
+    partTitle: "Activity & Interest Survey (Activities)",
+    question: "Analyzing real-world data (e.g., tracking personal spending via spreadsheets, analyzing sports statistics, tracking investment performance).",
+    category: "business"
+  },
+  {
+    id: "Q1.12",
+    part: 1,
+    partTitle: "Activity & Interest Survey (Activities)",
+    question: "Graphic design, photo editing (Photoshop, Lightroom), or video editing (Premiere, CapCut).",
+    category: "creative"
+  },
+  {
+    id: "Q1.16",
+    part: 1,
+    partTitle: "Activity & Interest Survey (Activities)",
+    question: "Participating in volunteer or community projects, especially those using technology to solve social problems.",
+    category: "interdisciplinary"
+  },
+  {
+    id: "Q2.3",
+    part: 2,
+    partTitle: "Personality & Thinking Style Survey (Traits)",
+    question: "I can patiently work on a logical or complex technical problem (like debugging) for hours without getting discouraged.",
+    category: "technical"
+  },
+  {
+    id: "Q2.6",
+    part: 2,
+    partTitle: "Personality & Thinking Style Survey (Traits)",
+    question: "I tend to look at the \"big picture\" and the end goal, rather than getting bogged down in minute technical details.",
+    category: "business"
+  },
+  {
+    id: "Q2.9",
+    part: 2,
+    partTitle: "Personality & Thinking Style Survey (Traits)",
+    question: "I am interested in how technology can help an organization generate revenue, save costs, or gain a competitive advantage.",
+    category: "business"
+  },
+  {
+    id: "Q2.13",
+    part: 2,
+    partTitle: "Personality & Thinking Style Survey (Traits)",
+    question: "I can easily put myself in the end-user's or audience's shoes to understand their needs, emotions, and difficulties.",
+    category: "creative"
+  },
+  {
+    id: "Q2.16",
+    part: 2,
+    partTitle: "Personality & Thinking Style Survey (Traits)",
+    question: "I enjoy working at the intersection of different fields (e.g., combining technology with medicine, or technology with art).",
+    category: "interdisciplinary"
+  },
+  {
+    id: "Q3.1",
+    part: 3,
+    partTitle: "Experience & Academic Aptitude Survey (Subjects)",
+    question: "Advanced Mathematics (e.g., Calculus, Trigonometry).",
+    category: "technical"
+  },
+  {
+    id: "Q3.4",
+    part: 3,
+    partTitle: "Experience & Academic Aptitude Survey (Subjects)",
+    question: "When learning programming (if applicable), I enjoy exploring algorithms and data structures (how things work internally).",
+    category: "technical"
+  },
+  {
+    id: "Q3.6",
+    part: 3,
+    partTitle: "Experience & Academic Aptitude Survey (Subjects)",
+    question: "Statistics and applying it to analyze data and draw conclusions.",
+    category: "business"
+  },
+  {
+    id: "Q3.12",
+    part: 3,
+    partTitle: "Experience & Academic Aptitude Survey (Subjects)",
+    question: "When learning programming (if applicable), I prefer focusing on User Interface (UI) and User Experience (UX) design to make things look good and easy to use.",
+    category: "creative"
+  },
+  {
+    id: "Q3.15",
+    part: 3,
+    partTitle: "Experience & Academic Aptitude Survey (Subjects)",
+    question: "I find myself performing well in and interested in both Natural Sciences (like Math) and Social Sciences (like Literature, History, Geography).",
+    category: "interdisciplinary"
+  }
+];
+
 export default {
   name: 'CareerTest',
   data() {
@@ -98,6 +206,7 @@ export default {
   },
   computed: {
     progress() {
+      if (this.questions.length === 0) return 0;
       return ((this.currentQuestion + 1) / this.questions.length) * 100
     },
     showPartHeader() {
@@ -118,35 +227,16 @@ export default {
     }
   },
   async mounted() {
-    await this.loadQuestions()
+    this.loadQuestions()
     const savedAnswers = localStorage.getItem('careerTestAnswers')
     if (savedAnswers) {
       this.answers = JSON.parse(savedAnswers)
     }
   },
   methods: {
-    async loadQuestions() {
-      try {
-        const response = await fetch(API_ENDPOINTS.QUESTIONS)
-        const data = await response.json()
-        if (data.success && data.questions && data.questions.length > 0) {
-          this.questions = data.questions
-        } else {
-          this.loadDefaultQuestions()
-        }
-      } catch (error) {
-        console.error('Failed to load questions:', error)
-        this.loadDefaultQuestions()
-      } finally {
-        this.loading = false
-      }
-    },
-    loadDefaultQuestions() {
-      this.questions = [
-        { id: "T1", part: 1, partTitle: "Technical Skills", question: "I enjoy writing code to solve logical problems.", category: "technical" },
-        { id: "B1", part: 2, partTitle: "Business & Management", question: "I enjoy leading teams and managing projects.", category: "business" },
-        { id: "C1", part: 3, partTitle: "Creativity & Design", question: "I enjoy designing visual interfaces (UI).", category: "creative" }
-      ]
+    loadQuestions() {
+      this.questions = HARDCODED_QUESTIONS
+      this.loading = false
     },
     nextQuestion() {
       if (this.currentQuestion < this.questions.length - 1) {
@@ -224,8 +314,11 @@ export default {
 
       localStorage.setItem('careerResults', JSON.stringify(results))
 
-      if (auth.isLoggedIn && auth.user && auth.accessToken) {
+      if (auth.isLoggedIn && auth.user) {
         try {
+          const userIdToSend = auth.user.id || auth.user._id || 'demo_user_id';
+          const usernameToSend = auth.user.username || 'Demo User';
+
           await fetch(API_ENDPOINTS.TEST_RESULTS, {
             method: 'POST',
             headers: {
@@ -233,7 +326,8 @@ export default {
               'Authorization': auth.getAuthHeader()
             },
             body: JSON.stringify({
-              userId: auth.user.id,
+              userId: userIdToSend,
+              username: usernameToSend,
               answers: sanitizedAnswers,
               results: results
             })
