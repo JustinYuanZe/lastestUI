@@ -37,29 +37,41 @@ const app = new Elysia()
       secret: REFRESH_TOKEN_SECRET
     })
   )
-  .onBeforeHandle(async () => {
-    await connectDB()
-  })
   .get('/', () => ({ 
     status: 'online',
     message: 'Job Quiz API Server',
     version: '1.0.0',
     timestamp: new Date().toISOString()
   }))
-  .get('/health', () => ({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    database: 'connected',
-    uptime: process.uptime()
-  }))
+  .get('/health', async () => {
+    try {
+        await connectDB();
+        return { 
+            status: 'ok', 
+            timestamp: new Date().toISOString(),
+            database: 'connected',
+            uptime: process.uptime()
+        }
+    } catch (e) {
+        return { 
+            status: 'error', 
+            database: 'failed',
+            error: e.message 
+        }
+    }
+  })
   .use((app) => {
     const jwtPlugin = app.decorator.jwt
     const refreshJwtPlugin = app.decorator.refreshJwt
     
+    if (typeof chatbotRoutes === 'function') {
+        app.use(chatbotRoutes(jwtPlugin))
+    } else {
+        app.use(chatbotRoutes)
+    }
+
     app.use(authRoutes(jwtPlugin, refreshJwtPlugin))
     
-    app.use(chatbotRoutes(jwtPlugin))
-
     if (typeof testRoutes === 'function') {
         app.use(testRoutes(jwtPlugin))
     } else {
