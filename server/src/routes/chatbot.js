@@ -1,7 +1,6 @@
 import { Elysia, t } from 'elysia'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-// System prompt for the AI Career Assistant
 const SYSTEM_PROMPT = `You are the Job Assistant for the Job Quiz web application - an AI career counselor specialized in helping users discover and pursue their ideal career paths. You provide practical, actionable job-related guidance.
 
 App Routes (use these exact paths for navigation):
@@ -88,16 +87,9 @@ LIMITATIONS - Do NOT:
 
 Always provide helpful, practical career guidance in a friendly and professional tone.`
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-
-/**
- * Builds the context-aware prompt for the AI
- */
 function buildChatPrompt(userMessage, context) {
   let prompt = SYSTEM_PROMPT + '\n\n'
   
-  // Add context information
   if (context) {
     prompt += 'Current Context:\n'
     
@@ -128,7 +120,6 @@ function buildChatPrompt(userMessage, context) {
     prompt += '\n'
   }
   
-  // Determine language preference
   const userLang = context?.user?.lang || 'en'
   if (userLang === 'zh-TW') {
     prompt += 'User is Taiwanese/Chinese. Respond in Traditional Chinese (繁體中文) unless they explicitly ask in English.\n\n'
@@ -142,14 +133,10 @@ function buildChatPrompt(userMessage, context) {
   return prompt
 }
 
-/**
- * Generate quick replies based on user message and context
- */
 function generateQuickReplies(userMessage, context) {
   const lowerMsg = userMessage.toLowerCase()
   const results = context?.latestResultSummary
   
-  // Career/job related queries
   if (lowerMsg.includes('career') || lowerMsg.includes('job') || lowerMsg.includes('result')) {
     if (results?.hasCompletedQuiz) {
       return ['Skills to develop', 'Interview preparation', 'Job search tips']
@@ -157,30 +144,26 @@ function generateQuickReplies(userMessage, context) {
     return ['Take the career quiz', 'What careers are trending?']
   }
   
-  // Interview related
   if (lowerMsg.includes('interview')) {
     return ['Common interview questions', 'Technical interview tips', 'Salary negotiation']
   }
   
-  // Resume/CV related
   if (lowerMsg.includes('resume') || lowerMsg.includes('cv')) {
     return ['Resume format tips', 'What to include', 'LinkedIn optimization']
   }
   
-  // Skills related
   if (lowerMsg.includes('skill') || lowerMsg.includes('learn')) {
     return ['Free learning resources', 'Recommended certifications', 'Project ideas']
   }
   
-  // Default suggestions based on quiz status
   if (results?.hasCompletedQuiz) {
     return ['Explain my results', 'Career advice', 'Next steps']
   }
   return ['Take career quiz', 'How does the quiz work?', 'Career options']
 }
 
-export const chatbotRoutes = new Elysia({ prefix: '/api/chatbot' })
-  .post('/message', async ({ body, set }) => {
+export const chatbotRoutes = (jwt) => new Elysia()
+  .post('/api/chatbot/message', async ({ body, set }) => {
     try {
       const { message, context } = body
 
@@ -191,7 +174,10 @@ export const chatbotRoutes = new Elysia({ prefix: '/api/chatbot' })
         }
       }
 
-      if (!process.env.GEMINI_API_KEY) {
+      const apiKey = process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        console.error("❌ Missing GEMINI_API_KEY");
         set.status = 500
         return { 
           error: 'Gemini API key is not configured',
@@ -201,10 +187,10 @@ export const chatbotRoutes = new Elysia({ prefix: '/api/chatbot' })
         }
       }
 
-      // Build the context-aware prompt
+      const genAI = new GoogleGenerativeAI(apiKey);
+
       const contextPrompt = buildChatPrompt(message, context || {})
 
-      // Initialize the model with system instruction
       const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
         systemInstruction: SYSTEM_PROMPT,
@@ -216,12 +202,10 @@ export const chatbotRoutes = new Elysia({ prefix: '/api/chatbot' })
         }
       })
 
-      // Generate response
       const result = await model.generateContent(contextPrompt)
       const response = await result.response
       const text = response.text()
 
-      // Generate quick replies
       const quickReplies = generateQuickReplies(message, context)
 
       return {
