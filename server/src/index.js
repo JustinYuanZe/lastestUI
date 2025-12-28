@@ -44,15 +44,7 @@ const app = new Elysia()
     status: 'online',
     message: 'Job Quiz API Server',
     version: '1.0.0',
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      health: '/health',
-      auth: '/login, /register, /refresh, /logout',
-      test: '/api/test',
-      user: '/api/user',
-      questions: '/api/questions',
-      chatbot: '/api/chatbot'
-    }
+    timestamp: new Date().toISOString()
   }))
   .get('/health', () => ({ 
     status: 'ok', 
@@ -64,12 +56,29 @@ const app = new Elysia()
     const jwtPlugin = app.decorator.jwt
     const refreshJwtPlugin = app.decorator.refreshJwt
     
+    app.use(authRoutes(jwtPlugin, refreshJwtPlugin))
+    
+    app.use(chatbotRoutes(jwtPlugin))
+
+    if (typeof testRoutes === 'function') {
+        app.use(testRoutes(jwtPlugin))
+    } else {
+        app.use(testRoutes)
+    }
+
+    if (typeof userRoutes === 'function') {
+        app.use(userRoutes(jwtPlugin))
+    } else {
+        app.use(userRoutes)
+    }
+
+    if (typeof questionRoutes === 'function') {
+        app.use(questionRoutes(jwtPlugin))
+    } else {
+        app.use(questionRoutes)
+    }
+
     return app
-      .use(authRoutes(jwtPlugin, refreshJwtPlugin))
-      .use(testRoutes(jwtPlugin))
-      .use(userRoutes(jwtPlugin))
-      .use(questionRoutes(jwtPlugin))
-      .use(chatbotRoutes(jwtPlugin))
   })
 
 export default app
