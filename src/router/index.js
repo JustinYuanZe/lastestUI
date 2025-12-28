@@ -7,7 +7,6 @@ import About from '../views/About.vue'
 import FAQ from '../views/FAQ.vue'
 import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
-import { auth } from '../store/auth'
 
 const routes = [
   {
@@ -23,8 +22,7 @@ const routes = [
   {
     path: '/career-test',
     name: 'CareerTest',
-    component: CareerTest,
-    meta: { requiresAuth: true }
+    component: CareerTest
   },
   {
     path: '/results',
@@ -58,16 +56,8 @@ const router = createRouter({
   routes
 })
 
-// Navigation guard for authentication
 router.beforeEach((to, from, next) => {
-  if (to.meta.requiresAuth && !auth.isLoggedIn) {
-    // Store the intended destination
-    sessionStorage.setItem('redirectAfterLogin', to.fullPath)
-    // Trigger login dialog by going to a special route
-    next({ name: 'Home', query: { showLogin: 'true' } })
-  } else {
-    next()
-  }
+  next()
 })
 
 export default router
