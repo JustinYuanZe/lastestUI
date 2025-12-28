@@ -1,34 +1,38 @@
 import { Elysia } from 'elysia'
 import mongoose from 'mongoose'
-import { TestResult } from '../models/index.js'
-import { verifyToken } from '../middleware/auth.js'
+import { TestResult, User } from '../models/index.js'
+import connectDB from '../config/database.js'
 
 export const testRoutes = (jwt) => new Elysia()
-  .post('/test-results', async ({ body, set, request }) => {
-    // Verify JWT token
-    const authUser = await verifyToken(jwt, request)
-    
-    if (!authUser) {
-      set.status = 401
-      return { success: false, message: 'Unauthorized' }
-    }
+  .post('/test-results', async ({ body, set }) => {
+    await connectDB();
 
-    const { userId, answers, results } = body
+    console.log("👉 [Submit Test] Processing request...");
 
-    if (!userId || !answers || !results) {
+    const { userId, answers, results, username } = body
+
+    if (!answers || !results) {
       set.status = 400
       return { success: false, message: 'Missing fields' }
     }
 
-    // Verify userId matches token
-    if (userId !== authUser.userId) {
-      set.status = 403
-      return { success: false, message: 'Forbidden' }
-    }
-
     try {
-      // Convert string userId to ObjectId
-      const userIdObjectId = new mongoose.Types.ObjectId(authUser.userId)
+      let userIdObjectId;
+      
+      if (username) {
+          console.log(`👉 Finding user by username: ${username}`);
+          const realUser = await User.findOne({ username: username });
+          
+          if (realUser) {
+              userIdObjectId = realUser._id;
+              console.log("✅ Found real user ID:", userIdObjectId);
+          }
+      }
+
+      if (!userIdObjectId) {
+          console.log("⚠️ Using Random ObjectId for Demo/Anonymous user");
+          userIdObjectId = new mongoose.Types.ObjectId();
+      }
       
       const testResult = new TestResult({
         userId: userIdObjectId,
@@ -41,8 +45,8 @@ export const testRoutes = (jwt) => new Elysia()
       })
 
       await testResult.save()
+      console.log("✅ Saved Test Result Successfully!");
 
-      // Convert Map back to object for response
       const responseResult = {
         id: testResult._id,
         userId: testResult.userId,
@@ -53,36 +57,27 @@ export const testRoutes = (jwt) => new Elysia()
 
       return { success: true, testResult: responseResult }
     } catch (error) {
-      console.error('Save test result error:', error)
+      console.error('❌ Save test result error:', error)
       set.status = 500
-      return { success: false, message: 'Internal server error' }
+      return { success: false, message: 'Internal server error: ' + error.message }
     }
   })
 
-  .get('/test-results/:userId', async ({ params, set, request }) => {
-    // Verify JWT token
-    const authUser = await verifyToken(jwt, request)
-    
-    if (!authUser) {
-      set.status = 401
-      return { success: false, message: 'Unauthorized' }
-    }
-
-    // Verify userId matches token
-    if (params.userId !== authUser.userId) {
-      set.status = 403
-      return { success: false, message: 'Forbidden' }
-    }
+  .get('/test-results/:userId', async ({ params, set }) => {
+    await connectDB();
 
     try {
-      // Convert string userId to ObjectId for query
-      const userIdObjectId = new mongoose.Types.ObjectId(authUser.userId)
+      let userIdObjectId;
+      try {
+        userIdObjectId = new mongoose.Types.ObjectId(params.userId)
+      } catch (e) {
+         return { success: true, results: [] }
+      }
       
       const userResults = await TestResult.find({ userId: userIdObjectId })
         .sort({ completedAt: -1 })
         .lean()
 
-      // Convert Map to object for each result
       const formattedResults = userResults.map(result => ({
         id: result._id,
         userId: result.userId,
@@ -100,4 +95,3 @@ export const testRoutes = (jwt) => new Elysia()
       return { success: false, message: 'Internal server error' }
     }
   })
-

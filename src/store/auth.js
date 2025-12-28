@@ -1,5 +1,4 @@
 import { reactive } from 'vue'
-import { API_URL } from '../config/api'
 
 export const auth = reactive({
   isLoggedIn: false,
@@ -8,7 +7,6 @@ export const auth = reactive({
   refreshToken: null,
 
   init() {
-    // Load tokens from localStorage on app start
     const accessToken = localStorage.getItem('accessToken')
     const refreshToken = localStorage.getItem('refreshToken')
     const user = localStorage.getItem('user')
@@ -21,32 +19,47 @@ export const auth = reactive({
     }
   },
 
-  login(user, accessToken, refreshToken) {
-    this.isLoggedIn = true
-    this.user = user
-    this.accessToken = accessToken
-    this.refreshToken = refreshToken
+  async login(username, password) {
+    const demoUser = {
+      _id: 'demo_id_' + Date.now(),
+      username: username,
+      department: 'Demo Department',
+      profile: { name: username }
+    }
 
-    // Store in localStorage
-    localStorage.setItem('accessToken', accessToken)
-    localStorage.setItem('refreshToken', refreshToken)
-    localStorage.setItem('user', JSON.stringify(user))
+    this.isLoggedIn = true
+    this.user = demoUser
+    this.accessToken = 'mock_access_token'
+    this.refreshToken = 'mock_refresh_token'
+
+    localStorage.setItem('accessToken', this.accessToken)
+    localStorage.setItem('refreshToken', this.refreshToken)
+    localStorage.setItem('user', JSON.stringify(demoUser))
+
+    return { success: true }
+  },
+
+  async register(userData) {
+    const demoUser = {
+      _id: 'demo_id_' + Date.now(),
+      username: userData.username,
+      department: userData.department,
+      profile: userData.profile || {}
+    }
+
+    this.isLoggedIn = true
+    this.user = demoUser
+    this.accessToken = 'mock_access_token'
+    this.refreshToken = 'mock_refresh_token'
+
+    localStorage.setItem('accessToken', this.accessToken)
+    localStorage.setItem('refreshToken', this.refreshToken)
+    localStorage.setItem('user', JSON.stringify(demoUser))
+
+    return { success: true }
   },
 
   async logout() {
-    // Call logout endpoint to invalidate refresh token
-    if (this.refreshToken) {
-      try {
-        await fetch(`${API_URL}/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: this.refreshToken })
-        })
-      } catch (error) {
-        console.error('Logout error:', error)
-      }
-    }
-
     this.isLoggedIn = false
     this.user = null
     this.accessToken = null
@@ -62,29 +75,7 @@ export const auth = reactive({
       this.logout()
       return null
     }
-
-    try {
-      const response = await fetch(`${API_URL}/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: this.refreshToken })
-      })
-
-      const data = await response.json()
-
-      if (data.success && data.accessToken) {
-        this.accessToken = data.accessToken
-        localStorage.setItem('accessToken', data.accessToken)
-        return data.accessToken
-      } else {
-        this.logout()
-        return null
-      }
-    } catch (error) {
-      console.error('Token refresh error:', error)
-      this.logout()
-      return null
-    }
+    return this.accessToken
   },
 
   getAuthHeader() {
@@ -92,5 +83,4 @@ export const auth = reactive({
   }
 })
 
-// Initialize auth on module load
 auth.init()
