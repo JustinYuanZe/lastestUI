@@ -1,251 +1,85 @@
 import { Elysia, t } from 'elysia'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const SYSTEM_PROMPT = `You are the Job Assistant for the Job Quiz web application - an AI career counselor specialized in helping users discover and pursue their ideal career paths. You provide practical, actionable job-related guidance.
+const BYPASS_AI = true;
 
-App Routes (use these exact paths for navigation):
-- Home: /
-- Career Test: /career-test
-- Results: /results
-- Profile: /profile
-- Login: /login
-- Register: /register
-- FAQ: /faq
-- About: /about
+const SYSTEM_PROMPT = `You are a helpful Career Assistant.`;
 
-Career Categories in the Quiz:
-1. TECHNICAL (Software Engineering & Computer Science): Software Developer, Data Scientist, ML Engineer, Systems Architect, Cybersecurity Specialist
-2. BUSINESS (Business Information Systems & IT Management): IT Project Manager, Business Analyst, IT Consultant, Product Manager, Data Analyst
-3. CREATIVE (Digital Design & Media Technology): UI/UX Designer, Front-end Developer, Digital Content Creator, Interactive Media Designer, Web Designer
-4. INTERDISCIPLINARY (Interdisciplinary IT & Emerging Technologies): Tech Entrepreneur, Innovation Consultant, Digital Transformation Specialist, EdTech Developer, HealthTech Specialist
-
-Persona & tone:
-- Friendly, encouraging career coach who genuinely wants to help users succeed
-- Concise and practical - focus on actionable advice
-- Use bullet points and numbered lists for clarity
-- If the user's language indicates Traditional Chinese (user.lang === "zh-TW"), respond in Traditional Chinese (繁體中文)
-- If the user's language indicates Vietnamese (user.lang === "vi"), respond in Vietnamese
-- When mentioning app pages/routes, format them as clickable markdown links using [Page Name](/route-path)
-  Example: "Check out the [Results page](/results) for more details"
-  Example: "Take the [Career Test](/career-test) to get started"
-
-CORE CAPABILITIES - Provide helpful guidance on:
-
-1. CAREER EXPLORATION & ADVICE:
-   - Explain what different IT/tech careers involve day-to-day
-   - Discuss pros/cons of different career paths
-   - Help users understand which careers match their quiz results
-   - Provide industry insights and job market trends
-   - Suggest career paths based on interests and strengths
-
-2. SKILL DEVELOPMENT GUIDANCE:
-   - Recommend specific technical skills to learn for each career
-   - Suggest free/paid learning resources (Coursera, Udemy, freeCodeCamp, etc.)
-   - Recommend certifications (AWS, Google, Microsoft, CompTIA, etc.)
-   - Provide learning roadmaps for different career paths
-   - Suggest portfolio projects to build
-
-3. JOB SEARCH STRATEGIES:
-   - Tips for writing effective resumes/CVs for tech roles
-   - LinkedIn profile optimization advice
-   - Job board recommendations (LinkedIn, Indeed, Glassdoor, AngelList, etc.)
-   - Networking strategies and tips
-   - How to find internships and entry-level positions
-
-4. INTERVIEW PREPARATION:
-   - Common interview questions for different tech roles
-   - Technical interview preparation tips
-   - Behavioral interview (STAR method) guidance
-   - Salary negotiation basics
-   - Questions to ask interviewers
-
-5. CAREER TRANSITION SUPPORT:
-   - Advice for switching between tech fields
-   - Transferable skills identification
-   - Realistic timelines for career changes
-   - First steps for career changers
-
-6. QUIZ & RESULTS GUIDANCE:
-   - Explain test instructions and question types
-   - Help interpret quiz results
-   - Suggest next steps based on results
-   - Encourage retaking if results seem off
-
-RESPONSE GUIDELINES:
-- If user has completed quiz, reference their specific results to personalize advice
-- Always provide 2-3 actionable next steps
-- Be encouraging but realistic about career expectations
-- For salary questions, give ranges and note they vary by location/experience
-- Do NOT include "Quick Replies:" or suggest follow-up questions in your response - these are handled separately
-
-LIMITATIONS - Do NOT:
-- Make API calls or modify user data
-- Provide medical, legal, or financial advice
-- Ask for sensitive info (passwords, payment details, ID numbers)
-- Guarantee job outcomes or make promises about employment
-- Pretend to submit applications or contact employers
-
-Always provide helpful, practical career guidance in a friendly and professional tone.`
-
-function buildChatPrompt(userMessage, context) {
-  let prompt = SYSTEM_PROMPT + '\n\n'
-  
-  if (context) {
-    prompt += 'Current Context:\n'
-    
-    if (context.user) {
-      prompt += `- User: ${context.user.name || 'Guest'} (ID: ${context.user.id || 'N/A'}, Language: ${context.user.lang || 'en'}, Authenticated: ${context.user.auth || false})\n`
-    }
-    
-    if (context.currentPage) {
-      prompt += `- Current Page: ${context.currentPage}\n`
-    }
-    
-    if (context.testState) {
-      prompt += `- Test State: Test ID ${context.testState.testId}, Question ${context.testState.questionIndex + 1}, Progress: ${(context.testState.progress * 100).toFixed(0)}%\n`
-    }
-    
-    if (context.latestResultSummary) {
-      prompt += `- Has Completed Quiz: ${context.latestResultSummary.hasCompletedQuiz ? 'Yes' : 'No'}\n`
-      if (context.latestResultSummary.hasCompletedQuiz) {
-        prompt += `- Quiz Results Summary:\n`
-        prompt += `  * Top Career Match: ${context.latestResultSummary.topCareerField || 'N/A'}\n`
-        prompt += `  * Top Score: ${context.latestResultSummary.score}/${context.latestResultSummary.maxScore} (${context.latestResultSummary.percentage}% match)\n`
-        prompt += `  * Career Rankings: ${context.latestResultSummary.allRecommendations?.join(' > ') || 'N/A'}\n`
-        prompt += `  * All Scores: ${context.latestResultSummary.detailedScores || 'N/A'}\n`
-        prompt += `\nUse these results to personalize career advice. Reference specific careers from their top match category.\n`
-      }
-    }
-    
-    prompt += '\n'
-  }
-  
-  const userLang = context?.user?.lang || 'en'
-  if (userLang === 'zh-TW') {
-    prompt += 'User is Taiwanese/Chinese. Respond in Traditional Chinese (繁體中文) unless they explicitly ask in English.\n\n'
-  } else if (userLang === 'vi') {
-    prompt += 'User is Vietnamese. Respond in Vietnamese unless they explicitly ask in English.\n\n'
-  }
-  
-  prompt += `User Message: ${userMessage}\n\n`
-  prompt += 'Provide your helpful response with practical career guidance.'
-  
-  return prompt
-}
-
-function generateQuickReplies(userMessage, context) {
-  const lowerMsg = userMessage.toLowerCase()
-  const results = context?.latestResultSummary
-  
-  if (lowerMsg.includes('career') || lowerMsg.includes('job') || lowerMsg.includes('result')) {
-    if (results?.hasCompletedQuiz) {
-      return ['Skills to develop', 'Interview preparation', 'Job search tips']
-    }
-    return ['Take the career quiz', 'What careers are trending?']
-  }
-  
-  if (lowerMsg.includes('interview')) {
-    return ['Common interview questions', 'Technical interview tips', 'Salary negotiation']
-  }
-  
-  if (lowerMsg.includes('resume') || lowerMsg.includes('cv')) {
-    return ['Resume format tips', 'What to include', 'LinkedIn optimization']
-  }
-  
-  if (lowerMsg.includes('skill') || lowerMsg.includes('learn')) {
-    return ['Free learning resources', 'Recommended certifications', 'Project ideas']
-  }
-  
-  if (results?.hasCompletedQuiz) {
-    return ['Explain my results', 'Career advice', 'Next steps']
-  }
-  return ['Take career quiz', 'How does the quiz work?', 'Career options']
-}
+const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
 
 export const chatbotRoutes = (jwt) => new Elysia()
   .post('/api/chatbot/message', async ({ body, set }) => {
-    try {
-      const { message, context } = body
+    
+    const startTime = Date.now();
+    log("👉 [START] Request received at /api/chatbot/message");
 
-      if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    try {
+      const { message } = body
+
+      if (!message) {
         set.status = 400
-        return { 
-          error: 'Message is required and must be a non-empty string' 
+        return { error: 'Message required' }
+      }
+
+      if (BYPASS_AI) {
+        log("🚀 [BYPASS MODE] Skipping Google API to test Server Latency.");
+        
+        await new Promise(r => setTimeout(r, 1000));
+        
+        log("✅ [SUCCESS] Server is responding!");
+        return {
+          reply: `[DIAGNOSTIC MODE] Server is WORKING! \n\nI received your message: "${message}". \n\n(Since I replied instantly, the issue is confirmed to be the connection to Google API).`,
+          quickReplies: ["Test Passed", "Server OK"],
+          metadata: { mode: 'bypass_ai', duration: Date.now() - startTime }
         }
       }
 
       const apiKey = process.env.GEMINI_API_KEY;
-
       if (!apiKey) {
-        console.error("❌ Missing GEMINI_API_KEY");
-        set.status = 500
-        return { 
-          error: 'Gemini API key is not configured',
-          reply: 'Sorry, the chatbot service is not configured. Please contact support.',
-          quickReplies: generateQuickReplies(message, context),
-          metadata: { confidence: 0 }
-        }
+        log("❌ Missing API Key");
+        throw new Error("Missing API Key");
       }
 
+      log("👉 [CONNECTING] Initializing Gemini...");
       const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-      const contextPrompt = buildChatPrompt(message, context || {})
+      log("👉 [SENDING] Sending prompt to Google...");
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Google API Timeout (10s Limit)")), 10000)
+      );
 
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        systemInstruction: SYSTEM_PROMPT,
-        generationConfig: {
-          temperature: 0.8,
-          topP: 0.95,
-          topK: 40,
-          candidateCount: 1,
-        }
-      })
+      const result = await Promise.race([
+        model.generateContent(SYSTEM_PROMPT + "\nUser: " + message),
+        timeoutPromise
+      ]);
 
-      const result = await model.generateContent(contextPrompt)
-      const response = await result.response
-      const text = response.text()
+      log("👉 [RECEIVED] Google responded!");
+      const response = await result.response;
+      const text = response.text();
 
-      const quickReplies = generateQuickReplies(message, context)
+      log(`✅ [DONE] Finished in ${Date.now() - startTime}ms`);
 
       return {
         reply: text,
-        action: null,
-        quickReplies: quickReplies,
-        metadata: { 
-          confidence: 0.9,
-          model: 'gemini-2.5-flash' 
-        }
+        quickReplies: [],
+        metadata: { model: 'gemini-2.5-flash' }
       }
 
     } catch (error) {
-      console.error('Chatbot error:', error)
-      set.status = 500
-
-      let errorMessage = 'Sorry, an error occurred while processing your request. Please try again later.'
-
+      log(`❌ [ERROR] ${error.message}`);
+      set.status = 500;
+      
       return {
-        error: error.message,
-        reply: errorMessage,
-        action: null,
-        quickReplies: generateQuickReplies(body?.message || '', body?.context),
-        metadata: { confidence: 0, error: error.message }
+        reply: `DIAGNOSTIC ERROR: ${error.message}. (Check Vercel Logs for details)`,
+        quickReplies: ["Retry"],
+        metadata: { error: error.message }
       }
     }
   }, {
     body: t.Object({
       message: t.String(),
-      context: t.Optional(t.Object({
-        sessionId: t.Optional(t.String()),
-        user: t.Optional(t.Object({
-          id: t.Optional(t.String()),
-          name: t.Optional(t.String()),
-          lang: t.Optional(t.String()),
-          auth: t.Optional(t.Boolean())
-        })),
-        currentPage: t.Optional(t.String()),
-        testState: t.Optional(t.Any()),
-        latestResultSummary: t.Optional(t.Any())
-      }))
+      context: t.Optional(t.Any())
     })
   })
