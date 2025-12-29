@@ -18,7 +18,18 @@ function buildRequestPayload(userMessage) {
 
 const app = new Elysia()
   .use(cors({
-    origin: [ 'https://jobquiz.vercel.app', 'http://localhost:5173', 'http://localhost:3000' ],
+    origin: (request) => {
+        const origin = request.headers.get('origin');
+        if (!origin) return true;
+        if (
+            origin.endsWith('.vercel.app') || 
+            origin === 'http://localhost:5173' || 
+            origin === 'http://localhost:3000'
+        ) {
+            return true;
+        }
+        return false;
+    },
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
@@ -43,7 +54,7 @@ const app = new Elysia()
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) return { reply: "System Error: Missing API Key" };
 
-        const MODEL_NAME = 'gemini-1.5-flash';
+        const MODEL_NAME = 'gemini-2.5-flash';
         
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
         
